@@ -1,5 +1,6 @@
 # Build directories
 build/
+pjsip/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake

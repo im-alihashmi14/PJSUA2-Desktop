@@ -12,12 +12,21 @@ using namespace pj;
 PJSIPManager::PJSIPManager() {}
 PJSIPManager::~PJSIPManager() { cleanup(); }
 
+void PJSIPManager::set_transport_type(TransportType type) {
+    if (initialized_) {
+        std::cout << "[PJSIP] Cannot change transport after initialization" << std::endl;
+        return;
+    }
+    transport_type_ = type;
+}
+
 void PJSIPManager::init() {
     if (initialized_) return;
     ep_ = std::make_unique<Endpoint>();
     ep_->libCreate();
     EpConfig ep_cfg;
-    ep_cfg.logConfig.level = 5;
+    ep_cfg.logConfig.level = 6;
+    ep_cfg.logConfig.consoleLevel = 6;
     // Set STUN server for NAT traversal (uaConfig only)
     ep_cfg.uaConfig.stunServer.clear();
     ep_cfg.uaConfig.stunServer.push_back("stun.l.google.com:19302");
@@ -25,42 +34,60 @@ void PJSIPManager::init() {
     ep_->libInit(ep_cfg);
     TransportConfig tcfg;
     tcfg.port = 5060;
-    ep_->transportCreate(PJSIP_TRANSPORT_UDP, tcfg);
+    pjsip_transport_type_e pj_transport;
+    switch (transport_type_) {
+        case TransportType::UDP:
+            pj_transport = PJSIP_TRANSPORT_UDP;
+            break;
+        case TransportType::TCP:
+            pj_transport = PJSIP_TRANSPORT_TCP;
+            break;
+        case TransportType::TLS:
+            pj_transport = PJSIP_TRANSPORT_TLS;
+            tcfg.port = 5061; // Standard SIP TLS port
+            break;
+        default:
+            pj_transport = PJSIP_TRANSPORT_UDP;
+    }
+    ep_->transportCreate(pj_transport, tcfg);
     ep_->libStart();
     // Explicitly select default audio devices
     ep_->audDevManager().setPlaybackDev(0);
     ep_->audDevManager().setCaptureDev(0);
-    std::cout << "[PJSIP] Initialized" << std::endl;
+    std::cout << "[PJSIP] Initialized with transport: ";
+    switch (transport_type_) {
+        case TransportType::UDP: std::cout << "UDP"; break;
+        case TransportType::TCP: std::cout << "TCP"; break;
+        case TransportType::TLS: std::cout << "TLS"; break;
+    }
+    std::cout << std::endl;
     initialized_ = true;
+}
+
+void PJSIPManager::set_ice_enabled(bool enabled) {
+    ice_enabled_ = enabled;
+}
+void PJSIPManager::set_interface_ip(const std::string& ip) {
+    interface_ip_ = ip;
 }
 
 void PJSIPManager::register_account(const std::string& uri, const std::string& username, const std::string& password) {
     if (!initialized_) init();
     AccountConfig acfg;
     acfg.idUri = uri;
-    // Correct registrar URI: sip:<domain>
     auto at_pos = uri.find('@');
     if (at_pos != std::string::npos) {
         auto domain = uri.substr(at_pos + 1);
         acfg.regConfig.registrarUri = "sip:" + domain;
     }
     acfg.sipConfig.authCreds.push_back(AuthCredInfo("digest", "*", username, 0, password));
-    // Enable ICE for this account
-    acfg.natConfig.iceEnabled = true;
-    acfg.natConfig.mediaStunUse = PJSUA_STUN_USE_DEFAULT;
-    // Disable SRTP for diagnosis
-    acfg.mediaConfig.srtpUse = PJMEDIA_SRTP_DISABLED;
-    acfg.mediaConfig.srtpSecureSignaling = 0;
-    // Restrict codecs to only PCMU/PCMA
-    auto codecs = ep_->codecEnum2();
-    for (auto &codec : codecs) {
-        if (codec.codecId.find("PCMU/8000") != std::string::npos || codec.codecId.find("PCMA/8000") != std::string::npos) {
-            ep_->codecSetPriority(codec.codecId, 255);
-        } else {
-            ep_->codecSetPriority(codec.codecId, 0);
-        }
+    // Set ICE and interface options
+    acfg.natConfig.iceEnabled = ice_enabled_;
+    if (!interface_ip_.empty()) {
+        acfg.sipConfig.proxies.clear();
+        acfg.sipConfig.proxies.push_back("sip:" + interface_ip_);
     }
-    account_ = std::make_shared<MyAccount>();
+    account_ = std::make_shared<MyAccount>(this);
     account_->create(acfg);
     std::cout << "[PJSIP] Registering account: " << uri << ", user: " << username << std::endl;
 }
@@ -70,10 +97,38 @@ void PJSIPManager::call(int acc_id, const std::string& destination) {
         std::cout << "[PJSIP] No account registered" << std::endl;
         return;
     }
-    call_ = std::make_shared<MyCall>(*account_);
     CallOpParam prm(true);
+    prm.opt.audioCount = 1;
+    prm.opt.videoCount = 0;
+    // Set ICE and interface options for the call if needed
+    // (PJSUA2 does not expose direct per-call ICE toggle, but account setting applies)
+    call_ = std::make_shared<MyCall>(*account_, acc_id);
+    calls_[call_->getId()] = call_;
     call_->makeCall(destination, prm);
     std::cout << "[PJSIP] Calling " << destination << std::endl;
+}
+
+void PJSIPManager::accept(int call_id) {
+    auto it = calls_.find(call_id);
+    if (it != calls_.end()) {
+        CallOpParam prm(true);
+        it->second->answer(prm);
+        std::cout << "[PJSIP] Accepted call " << call_id << std::endl;
+    } else {
+        std::cout << "[PJSIP] No such call to accept: " << call_id << std::endl;
+    }
+}
+
+void PJSIPManager::reject(int call_id) {
+    auto it = calls_.find(call_id);
+    if (it != calls_.end()) {
+        CallOpParam prm;
+        prm.statusCode = PJSIP_SC_DECLINE;
+        it->second->hangup(prm);
+        std::cout << "[PJSIP] Rejected call " << call_id << std::endl;
+    } else {
+        std::cout << "[PJSIP] No such call to reject: " << call_id << std::endl;
+    }
 }
 
 void PJSIPManager::mute(int call_id) {
@@ -126,10 +181,24 @@ void MyAccount::onRegState(OnRegStateParam &prm) {
               << " code=" << prm.code << std::endl;
 }
 
+void MyAccount::onIncomingCall(OnIncomingCallParam &iprm) {
+    std::cout << "[PJSIP] Incoming call (call_id=" << iprm.callId << ")";
+    // Try to print info if available
+    // If info is a string, print it; otherwise, just print call_id
+    // This is a fallback for unknown struct layout
+    std::cout << std::endl;
+    if (mgr_) {
+        auto new_call = std::make_shared<MyCall>(*this, iprm.callId);
+        mgr_->calls_[iprm.callId] = new_call;
+        std::cout << "Type 'accept " << iprm.callId << "' to answer or 'reject " << iprm.callId << "' to decline." << std::endl;
+    }
+}
+
 // --- MyCall implementation ---
 void MyCall::onCallState(OnCallStateParam &prm) {
     CallInfo ci = getInfo();
-    std::cout << "[PJSIP] Call: " << ci.remoteUri << " [" << ci.stateText << "]" << std::endl;
+    std::cout << "[PJSIP] Call: " << ci.remoteUri << " [" << ci.stateText << "] (state=" << ci.state << ")" << std::endl;
+    std::cout << "  Call ID: " << ci.id << std::endl;
     if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
         std::cout << "[PJSIP] Call disconnected" << std::endl;
     }
@@ -142,9 +211,12 @@ void MyCall::onCallMediaState(OnCallMediaStateParam &prm) {
             // Connect both directions for audio (like pjsua_conf_connect)
             aud_med.startTransmit(Endpoint::instance().audDevManager().getPlaybackDevMedia());
             Endpoint::instance().audDevManager().getCaptureDevMedia().startTransmit(aud_med);
-            std::cout << "[PJSIP] Audio media active" << std::endl;
+            std::cout << "[PJSIP] Audio media active (call_id=" << ci.id << ")" << std::endl;
+            std::cout << "  Media count: " << ci.media.size() << ", Media status: " << ci.media[0].status << std::endl;
         } catch (Error &err) {
             std::cout << "[PJSIP] Media error: " << err.info() << std::endl;
         }
+    } else {
+        std::cout << "[PJSIP] Media not active or not audio (call_id=" << ci.id << ")" << std::endl;
     }
 }

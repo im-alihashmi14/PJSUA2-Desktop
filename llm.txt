@@ -1,0 +1,453 @@
+This project is a PJSIP-based C++ CLI application for SIP communication, with a reusable core for platforms like React Native. It runs on Windows, macOS, and Linux, with the CLI isolated from the core C++ logic.
+
+### Project Structure
+- **src/main.cpp**: CLI entry point. Parses command-line arguments and calls PJSIPManager APIs.
+- **src/pjsip_manager.hpp/cpp**: Core PJSIP logic, reusable for CLI, React Native, etc.
+- **src/common/error_handling.hpp**: Shared error handling utilities.
+- **scripts/build_pjsip.sh**: Script to build PJSIP library.
+- **CMakeLists.txt**: Main CMake file, includes platform-specific configs, builds core as a static library.
+- **platform/CMakeLists.macos.txt**: macOS-specific CMake settings.
+- **platform/CMakeLists.windows.txt**: Windows-specific CMake settings.
+- **platform/CMakeLists.linux.txt**: Linux-specific CMake settings.
+
+### Build Instructions
+1. Run `scripts/build_pjsip.sh` to build PJSIP library for the target platform.
+2. Create a build directory: `mkdir build && cd build`.
+3. Run CMake: `cmake ..`.
+4. Build: `cmake --build .`.
+5. Run the CLI: `./pjsip-cli`.
+
+### CLI Usage
+- `pjsip-cli init`: Initialize PJSIP.
+- `pjsip-cli register <uri> <username> <password>`: Register a SIP account.
+- `pjsip-cli call <acc_id> <destination>`: Make a call.
+- `pjsip-cli mute <call_id>`: Mute a call.
+- `pjsip-cli unmute <call_id>`: Unmute a call.
+- `pjsip-cli hold <call_id>`: Put a call on hold.
+- `pjsip-cli unhold <call_id>`: Unhold a call.
+- `pjsip-cli hangup <call_id>`: Hang up a call.
+- `pjsip-cli hangup-all`: Hang up all calls.
+- `pjsip-cli cleanup`: Destroy PJSIP.
+
+### Dependencies
+- PJSIP library (built via `scripts/build_pjsip.sh`).
+- C++17 compiler (GCC, Clang, or MSVC).
+- CMake 3.15 or higher.
+
+### Notes
+- The core logic in `pjsip_manager.hpp/cpp` is platform-agnostic and reusable for React Native or other applications.
+- The CLI (`main.cpp`) only consumes `PJSIPManager` APIs, ensuring no CLI-specific logic affects the core.
+- PJSIP is built with `--disable-video` for simplicity.
+- Shared code is in `src/common/error_handling.hpp`.
+- Callbacks in `pjsip_manager.cpp` handle call state and media events.
+
+// Demo App, Following app works on Electron with NAPI. So use this and build isolated PJSIP/PJSUA2 module which can be called through CLI
+#include <napi.h>
+#include <pjsua-lib/pjsua.h>
+#include <pjmedia/audiodev.h>
+#include <memory>
+
+// Modified to accept env parameter
+static void check_error(Napi::Env env, const char* title, pj_status_t status) {
+    if (status != PJ_SUCCESS) {
+        char errmsg[PJ_ERR_MSG_SIZE];
+        pj_strerror(status, errmsg, sizeof(errmsg));
+        throw Napi::Error::New(env, std::string(title) + ": " + errmsg);
+    }
+}
+
+// ThreadSafeFunction for call state callback
+static Napi::ThreadSafeFunction g_callStateCallback = nullptr;
+
+// Helper to call JS callback from on_call_state
+void CallJsOnCallState(pjsua_call_id call_id, pjsip_inv_state state, const char* state_text) {
+    if (g_callStateCallback) {
+        // Copy data for thread safety
+        // auto data = std::make_shared<std::tuple<int, int, std::string>>(call_id, (int)state, std::string(state_text));
+        // napi_status status = g_callStateCallback.BlockingCall(data.get(), [](Napi::Env env, Napi::Function jsCallback, std::tuple<int, int, std::string>* value) {
+        //     if (env && jsCallback) {
+        //         try {
+        //             jsCallback.Call({
+        //                 Napi::Number::New(env, std::get<0>(*value)),
+        //                 Napi::Number::New(env, std::get<1>(*value)),
+        //                 Napi::String::New(env, std::get<2>(*value))
+        //             });
+        //         } catch (const std::exception& ex) {
+        //             PJ_LOG(1, ("pjsip_binding.cc", "Exception in JS callback: %s", ex.what()));
+        //         }
+        //     } else {
+        //         PJ_LOG(1, ("pjsip_binding.cc", "CallJsOnCallState: env or jsCallback is null!"));
+        //     }
+        // });
+        // if (status != napi_ok) {
+        //     PJ_LOG(1, ("pjsip_binding.cc", "CallJsOnCallState: BlockingCall failed with status %d", status));
+        // }
+        PJ_LOG(3, ("pjsip_binding.cc", "CallJsOnCallState: JS callback is disabled for crash diagnostic."));
+    } else {
+        PJ_LOG(3, ("pjsip_binding.cc", "CallJsOnCallState: No JS callback registered."));
+    }
+}
+
+// Callback for call state changes
+static void on_call_state(pjsua_call_id call_id, pjsip_event *e) {
+    PJ_UNUSED_ARG(e);
+    pjsua_call_info ci;
+    pjsua_call_get_info(call_id, &ci);
+    PJ_LOG(3, ("pjsip_binding.cc", "Call %d state changed to %s", call_id, pjsip_inv_state_name(ci.state)));
+    // Call JS callback if registered
+    CallJsOnCallState(call_id, ci.state, ci.state_text.ptr ? ci.state_text.ptr : pjsip_inv_state_name(ci.state));
+}
+
+// Callback for call media state changes - crucial for audio
+static void on_call_media_state(pjsua_call_id call_id) {
+    pjsua_call_info ci;
+    pjsua_call_get_info(call_id, &ci);
+    PJ_LOG(3, ("pjsip_binding.cc", "on_call_media_state: call_id=%d, media_status=%d, conf_slot=%d", call_id, ci.media_status, ci.conf_slot));
+    if (ci.media_status == PJSUA_CALL_MEDIA_ACTIVE) {
+        // When media is active, connect call to sound device
+        PJ_LOG(3, ("pjsip_binding.cc", "Media is active, connecting audio"));
+        // Connect both directions for audio
+        pj_status_t status;
+        status = pjsua_conf_connect(ci.conf_slot, 0);
+        if (status != PJ_SUCCESS) {
+            PJ_LOG(1, ("pjsip_binding.cc", "Failed to connect call to sound device (playback): %d", status));
+        }
+        
+        status = pjsua_conf_connect(0, ci.conf_slot);
+        if (status != PJ_SUCCESS) {
+            PJ_LOG(1, ("pjsip_binding.cc", "Failed to connect sound device to call (capture): %d", status));
+        }
+    } else {
+        PJ_LOG(3, ("pjsip_binding.cc", "Media is not active for call_id=%d", call_id));
+    }
+}
+
+// Initialize PJSIP
+Napi::Value Initialize(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    try {
+        // Create pjsua instance
+        pj_status_t status = pjsua_create();
+        check_error(env, "Error creating pjsua", status);
+        
+        // Initialize pjsua
+        pjsua_config cfg;
+        pjsua_logging_config log_cfg;
+        pjsua_media_config media_cfg;
+        
+        pjsua_config_default(&cfg);
+        pjsua_logging_config_default(&log_cfg);
+        pjsua_media_config_default(&media_cfg);
+        
+        // Set callbacks
+        cfg.cb.on_call_state = &on_call_state;
+        cfg.cb.on_call_media_state = &on_call_media_state;
+        
+        log_cfg.console_level = 5; // Increased log level for more details
+        
+        // --- BEGIN: Force standard audio settings and use default devices ---
+        media_cfg.clock_rate = 8000; // Standard for PCMU/PCMA
+        media_cfg.channel_count = 1; // Mono
+        media_cfg.snd_clock_rate = 8000;
+        media_cfg.audio_frame_ptime = 20; // 20ms
+        media_cfg.ec_tail_len = 0; // Disable echo canceller for diagnosis
+        PJ_LOG(3, ("pjsip_binding.cc", "Forcing media config: 8000Hz, mono, 20ms, no EC"));
+        // --- END: Force standard audio settings and use default devices ---
+        
+        status = pjsua_init(&cfg, &log_cfg, &media_cfg);
+        check_error(env, "Error initializing pjsua", status);
+        
+        // Initialize transport
+        pjsua_transport_config trans_cfg;
+        pjsua_transport_config_default(&trans_cfg);
+        
+        status = pjsua_transport_create(PJSIP_TRANSPORT_UDP, &trans_cfg, NULL);
+        check_error(env, "Error creating transport", status);
+        
+        // Start pjsua
+        status = pjsua_start();
+        check_error(env, "Error starting pjsua", status);
+        
+        // After pjsua_start()
+        // Explicitly select first available audio devices
+        int capture_dev = PJMEDIA_AUD_DEFAULT_CAPTURE_DEV;
+        int playback_dev = PJMEDIA_AUD_DEFAULT_PLAYBACK_DEV;
+        pjsua_set_snd_dev(capture_dev, playback_dev);
+        PJ_LOG(3, ("pjsip_binding.cc", "Using default audio devices: Capture=%d, Playback=%d", capture_dev, playback_dev));
+
+        // --- BEGIN: Temporarily disable SRTP for diagnosis ---
+        pjsua_acc_id default_acc = pjsua_acc_get_default();
+        if (default_acc != PJSUA_INVALID_ID) {
+            pjsua_acc_config acc_cfg;
+            pjsua_acc_config_default(&acc_cfg);
+            acc_cfg.use_srtp = PJMEDIA_SRTP_DISABLED;
+            acc_cfg.srtp_secure_signaling = 0; // allow non-TLS for testing
+            pj_status_t srtp_status = pjsua_acc_modify(default_acc, &acc_cfg);
+            if (srtp_status == PJ_SUCCESS) {
+                PJ_LOG(3, ("pjsip_binding.cc", "SRTP is DISABLED for diagnosis"));
+            } else {
+                PJ_LOG(1, ("pjsip_binding.cc", "Failed to disable SRTP for default account: %d", srtp_status));
+            }
+        } else {
+            PJ_LOG(2, ("pjsip_binding.cc", "No default account to disable SRTP on (will apply on account registration)"));
+        }
+        // --- END: Temporarily disable SRTP for diagnosis ---
+
+        return Napi::Boolean::New(env, true);
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, e.what());
+    }
+}
+
+// Register a SIP account
+Napi::Value RegisterAccount(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    if (info.Length() < 3) {
+        throw Napi::TypeError::New(env, "Wrong number of arguments");
+    }
+    
+    if (!info[0].IsString() || !info[1].IsString() || !info[2].IsString()) {
+        throw Napi::TypeError::New(env, "Wrong arguments");
+    }
+    
+    try {
+        std::string uri = info[0].As<Napi::String>().Utf8Value();
+        std::string username = info[1].As<Napi::String>().Utf8Value();
+        std::string password = info[2].As<Napi::String>().Utf8Value();
+        
+        // Register to SIP server
+        pjsua_acc_config acc_cfg;
+        pjsua_acc_config_default(&acc_cfg);
+        
+        acc_cfg.id = pj_str((char*)uri.c_str());
+        acc_cfg.reg_uri = pj_str((char*)uri.c_str());
+        acc_cfg.cred_count = 1;
+        acc_cfg.cred_info[0].realm = pj_str((char*)"*");
+        acc_cfg.cred_info[0].scheme = pj_str((char*)"digest");
+        acc_cfg.cred_info[0].username = pj_str((char*)username.c_str());
+        acc_cfg.cred_info[0].data_type = PJSIP_CRED_DATA_PLAIN_PASSWD;
+        acc_cfg.cred_info[0].data = pj_str((char*)password.c_str());
+        // --- BEGIN: SRTP and codec config for this account ---
+        acc_cfg.use_srtp = PJMEDIA_SRTP_OPTIONAL; // or PJMEDIA_SRTP_MANDATORY if required
+        acc_cfg.srtp_secure_signaling = 0; // allow non-TLS for testing
+        // --- END: SRTP and codec config ---
+        
+        pjsua_acc_id acc_id;
+        pj_status_t status = pjsua_acc_add(&acc_cfg, PJ_TRUE, &acc_id);
+        check_error(env, "Error adding account", status);
+        // --- BEGIN: Restrict codecs after account registration ---
+        pj_str_t pcmu = pj_str((char*)"PCMU/8000");
+        pj_str_t pcma = pj_str((char*)"PCMA/8000");
+        pj_str_t opus = pj_str((char*)"opus/48000/2");
+        pj_str_t speex_nb = pj_str((char*)"speex/8000");
+        pj_str_t speex_wb = pj_str((char*)"speex/16000");
+        pj_str_t speex_uwb = pj_str((char*)"speex/32000");
+        pj_str_t gsm = pj_str((char*)"GSM/8000");
+        pj_str_t ilbc = pj_str((char*)"iLBC/8000");
+        pjsua_codec_set_priority(&pcmu, PJMEDIA_CODEC_PRIO_NORMAL);
+        pjsua_codec_set_priority(&pcma, PJMEDIA_CODEC_PRIO_NORMAL);
+        pjsua_codec_set_priority(&opus, PJMEDIA_CODEC_PRIO_NORMAL);
+        pjsua_codec_set_priority(&speex_nb, 0);
+        pjsua_codec_set_priority(&speex_wb, 0);
+        pjsua_codec_set_priority(&speex_uwb, 0);
+        pjsua_codec_set_priority(&gsm, 0);
+        pjsua_codec_set_priority(&ilbc, 0);
+        PJ_LOG(3, ("pjsip_binding.cc", "Codec priorities set after account registration: PCMU, PCMA, Opus enabled; others disabled"));
+        // --- END: Restrict codecs after account registration ---
+        return Napi::Number::New(env, acc_id);
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, e.what());
+    }
+}
+
+// Make a call
+Napi::Value MakeCall(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    if (info.Length() < 2) {
+        throw Napi::TypeError::New(env, "Wrong number of arguments");
+    }
+    
+    if (!info[0].IsNumber() || !info[1].IsString()) {
+        throw Napi::TypeError::New(env, "Wrong arguments");
+    }
+    
+    try {
+        int acc_id = info[0].As<Napi::Number>().Int32Value();
+        std::string destination = info[1].As<Napi::String>().Utf8Value();
+        
+        pj_str_t uri = pj_str((char*)destination.c_str());
+        
+        pjsua_call_id call_id;
+        pj_status_t status = pjsua_call_make_call(acc_id, &uri, 0, NULL, NULL, &call_id);
+        check_error(env, "Error making call", status);
+        
+        return Napi::Number::New(env, call_id);
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, e.what());
+    }
+}
+
+// Mute microphone (local audio) for a specific call (does not send SIP hold)
+Napi::Value LocalMuteCall(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsNumber()) {
+        throw Napi::TypeError::New(env, "Wrong arguments: expected callId (number)");
+    }
+    try {
+        pjsua_call_id call_id = info[0].As<Napi::Number>().Int32Value();
+        pjsua_call_info ci;
+        pj_status_t status = pjsua_call_get_info(call_id, &ci);
+        check_error(env, "Error getting call info", status);
+        if (ci.conf_slot < 0) {
+            throw Napi::Error::New(env, "Cannot mute: call media is not active or conf_slot is invalid");
+        }
+        // Set tx level to 0 (mute mic -> remote)
+        status = pjsua_conf_adjust_tx_level(ci.conf_slot, 0.0f);
+        check_error(env, "Error muting (local) call", status);
+        return Napi::Boolean::New(env, true);
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, e.what());
+    }
+}
+
+// Unmute microphone (local audio) for a specific call
+Napi::Value LocalUnmuteCall(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsNumber()) {
+        throw Napi::TypeError::New(env, "Wrong arguments: expected callId (number)");
+    }
+    try {
+        pjsua_call_id call_id = info[0].As<Napi::Number>().Int32Value();
+        pjsua_call_info ci;
+        pj_status_t status = pjsua_call_get_info(call_id, &ci);
+        check_error(env, "Error getting call info", status);
+        if (ci.conf_slot < 0) {
+            throw Napi::Error::New(env, "Cannot unmute: call media is not active or conf_slot is invalid");
+        }
+        // Set tx level to 1.0 (unmute mic -> remote)
+        status = pjsua_conf_adjust_tx_level(ci.conf_slot, 1.0f);
+        check_error(env, "Error unmuting (local) call", status);
+        return Napi::Boolean::New(env, true);
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, e.what());
+    }
+}
+
+// Mute a specific call (SIP hold)
+Napi::Value HoldCall(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsNumber()) {
+        throw Napi::TypeError::New(env, "Wrong arguments: expected callId (number)");
+    }
+    try {
+        pjsua_call_id call_id = info[0].As<Napi::Number>().Int32Value();
+        pj_status_t status = pjsua_call_set_hold(call_id, NULL);
+        check_error(env, "Error putting call on hold (SIP mute)", status);
+        return Napi::Boolean::New(env, true);
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, e.what());
+    }
+}
+
+// Unmute a specific call (SIP unhold)
+Napi::Value UnholdCall(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsNumber()) {
+        throw Napi::TypeError::New(env, "Wrong arguments: expected callId (number)");
+    }
+    try {
+        pjsua_call_id call_id = info[0].As<Napi::Number>().Int32Value();
+        pj_status_t status = pjsua_call_reinvite(call_id, PJSUA_CALL_UNHOLD, NULL);
+        check_error(env, "Error unholding call (SIP unmute)", status);
+        return Napi::Boolean::New(env, true);
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, e.what());
+    }
+}
+
+// Hangup a specific call and ensure BYE is sent to remote
+Napi::Value HangupCall(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsNumber()) {
+        throw Napi::TypeError::New(env, "Wrong arguments: expected callId (number)");
+    }
+    try {
+        pjsua_call_id call_id = info[0].As<Napi::Number>().Int32Value();
+        // Use 200 as code to ensure BYE is sent (normal call clearing)
+        pj_status_t status = pjsua_call_hangup(call_id, 200, NULL, NULL);
+        check_error(env, "Error hanging up call", status);
+        return Napi::Boolean::New(env, true);
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, e.what());
+    }
+}
+
+// Hangup all calls
+Napi::Value HangupAllCalls(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    try {
+        pjsua_call_hangup_all();
+        return Napi::Boolean::New(env, true);
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, e.what());
+    }
+}
+
+// Cleanup and destroy PJSIP
+Napi::Value Cleanup(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    try {
+        pjsua_destroy();
+        if (g_callStateCallback) {
+            g_callStateCallback.Release();
+            g_callStateCallback = nullptr;
+            PJ_LOG(3, ("pjsip_binding.cc", "ThreadSafeFunction for call state callback released."));
+        }
+        return Napi::Boolean::New(env, true);
+    } catch (const std::exception& e) {
+        throw Napi::Error::New(env, e.what());
+    }
+}
+
+// Register a JS callback for call state changes
+Napi::Value SetCallStateCallback(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsFunction()) {
+        throw Napi::TypeError::New(env, "Expected a function as argument");
+    }
+    if (g_callStateCallback) {
+        g_callStateCallback.Release();
+        g_callStateCallback = nullptr;
+    }
+    g_callStateCallback = Napi::ThreadSafeFunction::New(
+        env,
+        info[0].As<Napi::Function>(),
+        "CallStateCallback",
+        0,
+        1
+    );
+    return env.Undefined();
+}
+
+// Initialize module
+Napi::Object Init(Napi::Env env, Napi::Object exports) {
+    exports.Set(Napi::String::New(env, "initialize"), Napi::Function::New(env, Initialize));
+    exports.Set(Napi::String::New(env, "registerAccount"), Napi::Function::New(env, RegisterAccount));
+    exports.Set(Napi::String::New(env, "makeCall"), Napi::Function::New(env, MakeCall));
+    exports.Set(Napi::String::New(env, "localMuteCall"), Napi::Function::New(env, LocalMuteCall));
+    exports.Set(Napi::String::New(env, "localUnmuteCall"), Napi::Function::New(env, LocalUnmuteCall));
+    exports.Set(Napi::String::New(env, "holdCall"), Napi::Function::New(env, HoldCall));
+    exports.Set(Napi::String::New(env, "unholdCall"), Napi::Function::New(env, UnholdCall));
+    exports.Set(Napi::String::New(env, "hangupCall"), Napi::Function::New(env, HangupCall));
+    exports.Set(Napi::String::New(env, "hangupAllCalls"), Napi::Function::New(env, HangupAllCalls));
+    exports.Set(Napi::String::New(env, "cleanup"), Napi::Function::New(env, Cleanup));
+    exports.Set(Napi::String::New(env, "setCallStateCallback"), Napi::Function::New(env, SetCallStateCallback));
+    return exports;
+}
+
+NODE_API_MODULE(pjsip, Init)
