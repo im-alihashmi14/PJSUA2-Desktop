@@ -58,6 +58,9 @@ private:
 class MyCall : public pj::Call {
 public:
     MyCall(pj::Account &acc, int call_id = PJSUA_INVALID_ID) : pj::Call(acc, call_id) {}
+    /**
+     * onCallState: Logs detailed SIP call state transitions, including when waiting for remote response, ACK, and when call is established.
+     */
     void onCallState(pj::OnCallStateParam &prm) override;
     void onCallMediaState(pj::OnCallMediaStateParam &prm) override;
 };
