@@ -1,0 +1,61 @@
+# Build directories
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.sln
+*.vcxproj*
+*.user
+*.obj
+*.exe
+*.dll
+*.lib
+*.pdb
+*.app
+*.dSYM/
+*.o
+*.a
+*.so
+*.dylib
+
+# PJSIP build output
+pjsip_build/
+*.tar.gz
+*.zip
+
+# OS-specific
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.bak
+*.tmp
+*.log
+
+# Python cache (for scripts)
+__pycache__/
+*.pyc
+
+# Node/NPM (if any JS bindings)
+node_modules/
+
+# Ignore test output
+*.test
+*.out
+*.log
+
+# Allow scripts, configs, and source
+!scripts/
+!src/
+!platform/
+!CMakeLists.txt
+!README.md
+!*.sh
+!*.bat
+!*.ps1 
