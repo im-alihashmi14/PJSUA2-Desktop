@@ -22,12 +22,14 @@ set(PJSIP_LIBS
     webrtc-arm-apple-darwin24.5.0
     pthread
 )
+
 find_library(COREAUDIO_FRAMEWORK CoreAudio)
 find_library(AUDIOTOOLBOX_FRAMEWORK AudioToolbox)
 find_library(FOUNDATION_FRAMEWORK Foundation)
 find_library(APPKIT_FRAMEWORK AppKit)
 find_library(CORESERVICES_FRAMEWORK CoreServices)
 find_library(AUDIOUNIT_FRAMEWORK AudioUnit)
+
 set(EXTRA_LIBS
     ${COREAUDIO_FRAMEWORK}
     ${AUDIOTOOLBOX_FRAMEWORK}
