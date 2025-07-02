@@ -9,6 +9,7 @@
 
 using namespace pj;
 
+
 PJSIPManager::PJSIPManager() {}
 PJSIPManager::~PJSIPManager() { cleanup(); }
 
@@ -27,6 +28,7 @@ void PJSIPManager::init() {
   ep_ = std::make_unique<Endpoint>();
   ep_->libCreate();
   EpConfig ep_cfg;
+
   ep_cfg.logConfig.level = 6;
   ep_cfg.logConfig.consoleLevel = 6;
   // Set STUN server for NAT traversal (uaConfig only)

@@ -1,0 +1,20 @@
+{
+  "name": "pjsua2",
+  "version": "1.0.0",
+  "description": "This project provides a cross-platform, reusable C++ SIP core (using PJSUA2) with bindings for Node.js (Electron) and React Native (Android/iOS), plus demo apps for each platform.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/im-alihashmi14/PJSUA2-Desktop.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/im-alihashmi14/PJSUA2-Desktop/issues"
+  },
+  "homepage": "https://github.com/im-alihashmi14/PJSUA2-Desktop#readme"
+}

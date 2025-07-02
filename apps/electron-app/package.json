@@ -1,0 +1,16 @@
+{
+  "name": "electron-app",
+  "version": "1.0.0",
+  "description": "This folder will contain a demo Electron app (React/JS/TS UI) that uses the Node.js SIP binding from `../../bindings/node/`.",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^37.1.0"
+  }
+}
