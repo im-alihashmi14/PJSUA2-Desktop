@@ -4,7 +4,8 @@
   "description": "This project provides a cross-platform, reusable C++ SIP core (using PJSUA2) with bindings for Node.js (Electron) and React Native (Android/iOS), plus demo apps for each platform.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "bun dev-cli.ts"
   },
   "repository": {
     "type": "git",
@@ -16,5 +17,14 @@
   "bugs": {
     "url": "https://github.com/im-alihashmi14/PJSUA2-Desktop/issues"
   },
-  "homepage": "https://github.com/im-alihashmi14/PJSUA2-Desktop#readme"
+  "homepage": "https://github.com/im-alihashmi14/PJSUA2-Desktop#readme",
+  "dependencies": {
+    "node-addon-api": "^8.4.0"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.8",
+    "inquirer": "^12.7.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
 }

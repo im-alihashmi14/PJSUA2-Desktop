@@ -1,0 +1,5 @@
+-std=c++17
+-I../../sip-core-cpp
+-I../../sip-core-cpp/common
+-I../../sip-core-cpp/pjsip_build/include
+-I./node_modules/node-addon-api 

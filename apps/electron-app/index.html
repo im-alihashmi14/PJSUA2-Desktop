@@ -5,9 +5,72 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=800, initial-scale=1.0">
   <title>Electron SIP Demo</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    input, button { margin: 0.2em; }
+    #log { background: #222; color: #eee; padding: 1em; height: 200px; overflow: auto; }
+  </style>
 </head>
 <body>
   <h1>Electron SIP Demo</h1>
-  <p>If you see this, Electron is working!</p>
+  <div>
+    <button onclick="sip('initSIP')">Init SIP</button>
+    <button onclick="sip('cleanup')">Cleanup</button>
+    <button onclick="sip('hangupAll')">Hangup All</button>
+  </div>
+  <div>
+    <input id="transportType" placeholder="Transport (udp/tcp/tls)" />
+    <button onclick="sip('setTransportType', get('transportType'))">Set Transport</button>
+  </div>
+  <div>
+    <input id="iceEnabled" type="checkbox" /> ICE Enabled
+    <button onclick="sip('setIceEnabled', getChecked('iceEnabled'))">Set ICE</button>
+  </div>
+  <div>
+    <input id="interfaceIp" placeholder="Interface IP" />
+    <button onclick="sip('setInterfaceIp', get('interfaceIp'))">Set Interface IP</button>
+  </div>
+  <div>
+    <input id="regUri" placeholder="SIP URI" />
+    <input id="regUser" placeholder="Username" />
+    <input id="regPass" placeholder="Password" />
+    <button onclick="sip('registerAccount', get('regUri'), get('regUser'), get('regPass'))">Register</button>
+  </div>
+  <div>
+    <input id="accId" placeholder="Account ID (int)" type="number" />
+    <input id="dest" placeholder="Destination SIP URI" />
+    <button onclick="sip('call', parseInt(get('accId')), get('dest'))">Call</button>
+  </div>
+  <div>
+    <input id="callId" placeholder="Call ID (int)" type="number" />
+    <button onclick="sip('mute', parseInt(get('callId')))" >Mute</button>
+    <button onclick="sip('unmute', parseInt(get('callId')))" >Unmute</button>
+    <button onclick="sip('hold', parseInt(get('callId')))" >Hold</button>
+    <button onclick="sip('unhold', parseInt(get('callId')))" >Unhold</button>
+    <button onclick="sip('hangup', parseInt(get('callId')))" >Hangup</button>
+    <button onclick="sip('accept', parseInt(get('callId')))" >Accept</button>
+    <button onclick="sip('reject', parseInt(get('callId')))" >Reject</button>
+  </div>
+  <h3>Log</h3>
+  <pre id="log"></pre>
+  <script>
+    const { ipcRenderer } = require('electron');
+    function get(id) { return document.getElementById(id).value; }
+    function getChecked(id) { return document.getElementById(id).checked; }
+    function log(msg) {
+      const el = document.getElementById('log');
+      el.textContent += msg + '\n';
+      el.scrollTop = el.scrollHeight;
+    }
+    async function sip(fn, ...args) {
+      log('> ' + fn + '(' + args.map(a => JSON.stringify(a)).join(', ') + ')');
+      try {
+        const result = await ipcRenderer.invoke('sip:' + fn, ...args);
+        log('< ' + fn + ': ' + (result === undefined ? 'OK' : JSON.stringify(result)));
+      } catch (e) {
+        log('< ' + fn + ' ERROR: ' + e.message);
+      }
+    }
+  </script>
 </body>
 </html> 
