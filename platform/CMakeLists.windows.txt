@@ -1,1 +1,24 @@
 # Windows-specific CMake settings
+
+set(PJSIP_LIBS
+    pjsua2-lib-x86_64-x64-vc14-Release
+    pjsua-lib-x86_64-x64-vc14-Release
+    pjsip-ua-x86_64-x64-vc14-Release
+    pjsip-simple-x86_64-x64-vc14-Release
+    pjsip-core-x86_64-x64-vc14-Release
+    pjmedia-codec-x86_64-x64-vc14-Release
+    pjmedia-x86_64-x64-vc14-Release
+    pjmedia-videodev-x86_64-x64-vc14-Release
+    pjmedia-audiodev-x86_64-x64-vc14-Release
+    pjnath-x86_64-x64-vc14-Release
+    pjlib-util-x86_64-x64-vc14-Release
+    pjlib-x86_64-x64-vc14-Release
+    libresample-x86_64-x64-vc14-Release
+    libgsmcodec-x86_64-x64-vc14-Release
+    libspeex-x86_64-x64-vc14-Release
+    libilbccodec-x86_64-x64-vc14-Release
+    libg7221codec-x86_64-x64-vc14-Release
+    libsrtp-x86_64-x64-vc14-Release
+    libwebrtc-x86_64-x64-vc14-Release
+)
+set(EXTRA_LIBS ws2_32)
