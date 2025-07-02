@@ -41,8 +41,9 @@ private:
     std::map<int, std::shared_ptr<MyCall>> calls_;
     bool initialized_ = false;
     TransportType transport_type_ = TransportType::UDP;
-    bool ice_enabled_ = true;
+    bool ice_enabled_ = false;
     std::string interface_ip_;
+    int transport_id_ = -1;
     friend class MyAccount;
 };
 

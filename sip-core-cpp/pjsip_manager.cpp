@@ -52,7 +52,14 @@ void PJSIPManager::init() {
   default:
     pj_transport = PJSIP_TRANSPORT_UDP;
   }
-  ep_->transportCreate(pj_transport, tcfg);
+  try {
+    transport_id_ = ep_->transportCreate(pj_transport, tcfg);
+    std::cout << "[PJSIP] Transport created successfully. ID: " << transport_id_
+              << std::endl;
+  } catch (const Error &err) {
+    std::cerr << "[PJSIP] Failed to create transport: " << err.info()
+              << std::endl;
+  }
   ep_->libStart();
   // Explicitly select default audio devices
   ep_->audDevManager().setPlaybackDev(0);
@@ -91,7 +98,17 @@ void PJSIPManager::register_account(const std::string &uri,
   auto at_pos = uri.find('@');
   if (at_pos != std::string::npos) {
     auto domain = uri.substr(at_pos + 1);
-    acfg.regConfig.registrarUri = "sip:" + domain;
+    std::string registrar = "sip:" + domain;
+    // Append transport param if not UDP
+    if (transport_type_ == TransportType::TCP) {
+      registrar += ";transport=tcp";
+    } else if (transport_type_ == TransportType::TLS) {
+      registrar += ";transport=tls";
+    }
+    else if (transport_type_ == TransportType::UDP) {
+      registrar += ";transport=udp";
+    }
+    acfg.regConfig.registrarUri = registrar;
   }
 
   // Basic auth
@@ -100,13 +117,11 @@ void PJSIPManager::register_account(const std::string &uri,
 
   // --- NAT and ICE configuration ---
   acfg.natConfig.iceEnabled = ice_enabled_;
-
-  // Let PJSIP rewrite Contact header (important for NAT traversal when ICE is on)
   acfg.natConfig.contactRewriteUse = PJSUA_CONTACT_REWRITE_ALWAYS_UPDATE;
   // acfg.natConfig.viaRewriteUse = ...; // Not available in this version
-
-  // Avoid overriding proxy unless explicitly needed
-  if (!interface_ip_.empty()) {
+  acfg.sipConfig.transportId = transport_id_;
+      // Avoid overriding proxy unless explicitly needed
+      if (!interface_ip_.empty()) {
     std::cout << "[PJSIP] Note: interface_ip is set but will not override SIP "
                  "proxy directly to avoid ICE issues."
               << std::endl;
