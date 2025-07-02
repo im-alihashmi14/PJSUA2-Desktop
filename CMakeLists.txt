@@ -6,11 +6,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Include platform-specific settings
 if(APPLE)
-    include(platform/CMakeLists.macos.txt)
+    include(sip-core-cpp/platform/CMakeLists.macos.txt)
 elseif(WIN32)
-    include(platform/CMakeLists.windows.txt)
+    include(sip-core-cpp/platform/CMakeLists.windows.txt)
 elseif(UNIX)
-    include(platform/CMakeLists.linux.txt)
+    include(sip-core-cpp/platform/CMakeLists.linux.txt)
 endif()
 
-add_subdirectory(src)
+add_subdirectory(sip-core-cpp)
+add_subdirectory(bindings/cli)

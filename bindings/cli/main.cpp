@@ -4,7 +4,7 @@
 #ifndef PJ_IS_BIG_ENDIAN
 #define PJ_IS_BIG_ENDIAN 0
 #endif
-#include "pjsip_manager.hpp"
+#include "../../sip-core-cpp/pjsip_manager.hpp"
 #include <iostream>
 #include <string>
 #include <vector>
