@@ -198,8 +198,16 @@ void MyAccount::onIncomingCall(OnIncomingCallParam &iprm) {
 void MyCall::onCallState(OnCallStateParam &prm) {
     CallInfo ci = getInfo();
     std::cout << "[PJSIP] Call: " << ci.remoteUri << " [" << ci.stateText << "] (state=" << ci.state << ")" << std::endl;
-    std::cout << "  Call ID: " << ci.id << std::endl;
-    if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
+    std::cout << "  Call ID: " << ci.id << ", State code: " << ci.state << ", Last status code: " << ci.lastStatusCode << std::endl;
+    if (ci.state == PJSIP_INV_STATE_CALLING) {
+        std::cout << "  [PJSIP] Outgoing call, waiting for response from remote..." << std::endl;
+    } else if (ci.state == PJSIP_INV_STATE_EARLY) {
+        std::cout << "  [PJSIP] Call is ringing or in early media. Still waiting for answer..." << std::endl;
+    } else if (ci.state == PJSIP_INV_STATE_CONNECTING) {
+        std::cout << "  [PJSIP] Call is connecting, waiting for ACK..." << std::endl;
+    } else if (ci.state == PJSIP_INV_STATE_CONFIRMED) {
+        std::cout << "  [PJSIP] Call is confirmed (ACK received). Call is established!" << std::endl;
+    } else if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
         std::cout << "[PJSIP] Call disconnected" << std::endl;
     }
 }
