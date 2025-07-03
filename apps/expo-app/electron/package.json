@@ -1,0 +1,16 @@
+{
+  "name": "expo-app-electron-shell",
+  "version": "1.0.0",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "dev": "wait-on http://localhost:8081 && electron main.js",
+    "start": "electron main.js",
+    "build": "echo 'No build step for Electron shell. Use the Expo static build.'"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-reload": "^2.0.0-alpha.1",
+    "wait-on": "^8.0.3"
+  }
+}
