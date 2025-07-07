@@ -1,14 +1,16 @@
-#!/usr/bin/env bun
-import inquirer from 'inquirer';
-import { execSync } from 'child_process';
-import * as path from 'path';
-import * as fs from 'fs';
+// #!/usr/bin/env bun
+// Converted to Node.js compatible JavaScript
+const inquirer = require('inquirer');
+const { execSync } = require('child_process');
+const path = require('path');
+const fs = require('fs');
 
 const root = process.cwd();
 
-function run(cmd: string, opts: {cwd?: string, stdio?: any} = {}) {
+function run(cmd, opts) {
+  opts = opts || {};
   try {
-    execSync(cmd, { stdio: 'inherit', cwd: opts.cwd || root });
+    execSync(cmd, { stdio: 'inherit', cwd: opts.cwd ? opts.cwd : root });
   } catch (e) {
     console.error(`\n[ERROR] Command failed: ${cmd}\n`);
     process.exit(1);
@@ -28,8 +30,10 @@ function getMenuChoices() {
     choices.push({ name: 'Run CLI app', value: 'run_cli' });
   }
   // Only show Electron if Electron app exists
-  if (fs.existsSync(path.join(root, 'apps/electron-app/main.js')) &&
-      fs.existsSync(path.join(root, 'bindings/node/build/Release/sipaddon.node'))) {
+  if (
+    fs.existsSync(path.join(root, 'apps/electron-app/main.js')) &&
+    fs.existsSync(path.join(root, 'bindings/node/build/Release/sipaddon.node'))
+  ) {
     choices.push({ name: 'Run Electron app', value: 'run_electron' });
   }
   choices.push({ name: 'Clean all builds', value: 'clean' });
@@ -55,28 +59,28 @@ async function main() {
     const action = await mainMenu();
     switch (action) {
       case 'build_pjsip':
-        run('bash sip-core-cpp/scripts/build_pjsip.sh');
+        run('bash sip-core-cpp/scripts/build_pjsip.sh', {});
         break;
       case 'build_core':
         run('cmake -S . -B build && cmake --build build', { cwd: root });
         break;
       case 'build_node':
-        run('node-gyp configure build --directory bindings/node');
+        run('node-gyp configure build --directory bindings/node', {});
         break;
       case 'copy_libs':
-        run('bash bindings/node/copy_pjsip_libs.sh sip-core-cpp/pjsip_build/lib');
+        run('bash bindings/node/copy_pjsip_libs.sh sip-core-cpp/pjsip_build/lib', {});
         break;
       case 'run_cli':
-        run('./build/bindings/cli/pjsip-cli');
+        run('./build/bindings/cli/pjsip-cli', {});
         break;
       case 'run_electron':
-        run('npm start --prefix apps/electron-app');
+        run('npm start --prefix apps/electron-app', {});
         break;
       case 'clean':
-        run('rm -rf build sip-core-cpp/pjsip_build bindings/node/build');
+        run('rm -rf build sip-core-cpp/pjsip_build bindings/node/build', {});
         break;
       case 'status':
-        run('git status');
+        run('git status', {});
         break;
       case 'exit':
         process.exit(0);
