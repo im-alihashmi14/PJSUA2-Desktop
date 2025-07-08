@@ -1,24 +1,34 @@
 # Windows-specific CMake settings
 
+# Allow switching between ARM64 and x64 by setting -DPJSIP_ARCH=ARM64 or -DPJSIP_ARCH=x64
+if(NOT DEFINED PJSIP_ARCH)
+    set(PJSIP_ARCH ARM64)
+endif()
+
 set(PJSIP_LIBS
-    pjsua2-lib-x86_64-x64-vc14-Release
-    pjsua-lib-x86_64-x64-vc14-Release
-    pjsip-ua-x86_64-x64-vc14-Release
-    pjsip-simple-x86_64-x64-vc14-Release
-    pjsip-core-x86_64-x64-vc14-Release
-    pjmedia-codec-x86_64-x64-vc14-Release
-    pjmedia-x86_64-x64-vc14-Release
-    pjmedia-videodev-x86_64-x64-vc14-Release
-    pjmedia-audiodev-x86_64-x64-vc14-Release
-    pjnath-x86_64-x64-vc14-Release
-    pjlib-util-x86_64-x64-vc14-Release
-    pjlib-x86_64-x64-vc14-Release
-    libresample-x86_64-x64-vc14-Release
-    libgsmcodec-x86_64-x64-vc14-Release
-    libspeex-x86_64-x64-vc14-Release
-    libilbccodec-x86_64-x64-vc14-Release
-    libg7221codec-x86_64-x64-vc14-Release
-    libsrtp-x86_64-x64-vc14-Release
-    libwebrtc-x86_64-x64-vc14-Release
+    pjsua2-lib-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    pjsua-lib-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    pjsip-ua-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    pjsip-simple-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    pjsip-core-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    pjmedia-codec-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    pjmedia-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    pjmedia-videodev-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    pjmedia-audiodev-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    pjnath-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    pjlib-util-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    pjlib-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    libresample-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    libgsmcodec-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    libspeex-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    libilbccodec-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    libg7221codec-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    libsrtp-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    libwebrtc-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    libbaseclasses-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    libmilenage-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
+    libyuv-${PJSIP_ARCH}-${PJSIP_ARCH}-vc14-Release
 )
 set(EXTRA_LIBS ws2_32)
+
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL" CACHE STRING "" FORCE)

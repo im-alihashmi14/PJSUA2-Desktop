@@ -1,13 +1,11 @@
-// #!/usr/bin/env bun
-// Converted to Node.js compatible JavaScript
-// To use a different Visual Studio toolset, set the environment variable PJSIP_VS_TOOLSET (e.g., v142 for VS 2019, v143 for VS 2022)
+// Unix (macOS/Linux)-specific CLI for PJSUA2-Desktop
 const inquirer = require('inquirer');
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
 const root = process.cwd();
-const isWin = process.platform === 'win32';
+const isWin = false;
 
 function run(cmd, opts) {
   opts = opts || {};
@@ -20,32 +18,7 @@ function run(cmd, opts) {
 }
 
 function getBashCmd(scriptPath) {
-  if (isWin) {
-    // Try Git Bash if available
-    const gitBash = 'C:/Program Files/Git/bin/bash.exe';
-    if (fs.existsSync(gitBash)) {
-      return `"${gitBash}" ${scriptPath}`;
-    } else {
-      throw new Error('Bash is required on Windows. Please install Git Bash.');
-    }
-  } else {
-    return `bash ${scriptPath}`;
-  }
-}
-
-function findPjsipSln() {
-  // Try to find the preferred .sln file in the pjsip directory
-  const pjsipDir = path.join(root, 'pjsip');
-  if (!fs.existsSync(pjsipDir)) return null;
-  const files = fs.readdirSync(pjsipDir);
-  if (files.includes('pjproject-vs14.sln')) {
-    return path.join(pjsipDir, 'pjproject-vs14.sln');
-  }
-  if (files.includes('pjproject-vs8.sln')) {
-    return path.join(pjsipDir, 'pjproject-vs8.sln');
-  }
-  const sln = files.find(f => f.endsWith('.sln'));
-  return sln ? path.join(pjsipDir, sln) : null;
+  return `bash ${scriptPath}`;
 }
 
 function syncPjsipBuild() {
@@ -53,21 +26,16 @@ function syncPjsipBuild() {
   const buildDir = path.join(root, 'sip-core-cpp', 'pjsip_build');
   const libDir = path.join(buildDir, 'lib');
   const includeDir = path.join(buildDir, 'include');
-
-  // Create directories if missing
   if (!fs.existsSync(buildDir)) fs.mkdirSync(buildDir);
   if (!fs.existsSync(libDir)) fs.mkdirSync(libDir);
   if (!fs.existsSync(includeDir)) fs.mkdirSync(includeDir);
-
-  // Copy libraries
   const libSrcDirs = [path.join(pjsipDir, 'lib')];
-  // Also check for subproject lib dirs (e.g., pjlib/lib, pjmedia/lib, etc.)
   const subprojects = ['pjlib', 'pjlib-util', 'pjmedia', 'pjnath', 'pjsip', 'third_party'];
   for (const sub of subprojects) {
     const subLib = path.join(pjsipDir, sub, 'lib');
     if (fs.existsSync(subLib)) libSrcDirs.push(subLib);
   }
-  const libExt = isWin ? '.lib' : '.a';
+  const libExt = '.a';
   for (const dir of libSrcDirs) {
     if (!fs.existsSync(dir)) continue;
     const files = fs.readdirSync(dir).filter(f => f.endsWith(libExt));
@@ -77,15 +45,11 @@ function syncPjsipBuild() {
       fs.copyFileSync(src, dest);
     }
   }
-
-  // Copy headers
-  // Find all include folders in pjsip and subprojects
   const includeSrcDirs = [path.join(pjsipDir, 'include')];
   for (const sub of subprojects) {
     const subInc = path.join(pjsipDir, sub, 'include');
     if (fs.existsSync(subInc)) includeSrcDirs.push(subInc);
   }
-  // Recursively copy all files/folders from each includeSrcDir to includeDir
   const copyRecursive = (src, dest) => {
     if (!fs.existsSync(src)) return;
     if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
@@ -106,22 +70,16 @@ function syncPjsipBuild() {
 }
 
 function getMenuChoices() {
-  const choices = [];
-  if (isWin) {
-    choices.push({ name: 'Build PJSIP (Visual Studio/MSBuild)', value: 'build_pjsip_vs' });
-  } else {
-    choices.push({ name: 'Build PJSIP (native C libs)', value: 'build_pjsip' });
-  }
-  choices.push({ name: 'Sync PJSIP headers/libs to local pjsip_build', value: 'sync_pjsip_build' });
-  choices.push({ name: 'Build SIP core (CMake)', value: 'build_core' });
-  choices.push({ name: 'Build Node/Electron bindings', value: 'build_node' });
-  choices.push({ name: 'Copy PJSIP libs for Node', value: 'copy_libs' });
-
-  // Only show CLI if built
-  if (fs.existsSync(path.join(root, isWin ? 'build/bindings/cli/pjsip-cli.exe' : 'build/bindings/cli/pjsip-cli'))) {
+  const choices = [
+    { name: 'Build PJSIP (native C libs)', value: 'build_pjsip' },
+    { name: 'Sync PJSIP headers/libs to local pjsip_build', value: 'sync_pjsip_build' },
+    { name: 'Build SIP core (CMake)', value: 'build_core' },
+    { name: 'Build Node/Electron bindings', value: 'build_node' },
+    { name: 'Copy PJSIP libs for Node', value: 'copy_libs' },
+  ];
+  if (fs.existsSync(path.join(root, 'build/bindings/cli/pjsip-cli'))) {
     choices.push({ name: 'Run CLI app', value: 'run_cli' });
   }
-  // Only show Electron if Electron app exists
   if (
     fs.existsSync(path.join(root, 'apps/electron-app/main.js')) &&
     fs.existsSync(path.join(root, 'bindings/node/build/Release/sipaddon.node'))
@@ -153,29 +111,6 @@ async function main() {
       case 'build_pjsip':
         run(getBashCmd('sip-core-cpp/scripts/build_pjsip.sh'), {});
         break;
-      case 'build_pjsip_vs': {
-        // Nested prompt for architecture
-        const { arch } = await inquirer.prompt([
-          {
-            type: 'list',
-            name: 'arch',
-            message: 'Select architecture for PJSIP build:',
-            choices: [
-              { name: 'x64 (recommended)', value: 'x64' },
-              { name: 'ARM64', value: 'ARM64' },
-            ],
-            default: 'x64',
-          },
-        ]);
-        const sln = findPjsipSln();
-        if (!sln) {
-          console.error('Could not find a .sln file in the pjsip directory. Please ensure PJSIP source is present.');
-          process.exit(1);
-        }
-        const toolset = process.env.PJSIP_VS_TOOLSET || 'v143';
-        run(`msbuild "${sln}" /p:Configuration=Release /p:Platform=${arch} /p:PlatformToolset=${toolset}`, {});
-        break;
-      }
       case 'sync_pjsip_build':
         syncPjsipBuild();
         break;
@@ -189,26 +124,13 @@ async function main() {
         run(getBashCmd('bindings/node/copy_pjsip_libs.sh sip-core-cpp/pjsip_build/lib'), {});
         break;
       case 'run_cli':
-        run(isWin ? '.\\build\\bindings\\cli\\pjsip-cli.exe' : './build/bindings/cli/pjsip-cli', {});
+        run('./build/bindings/cli/pjsip-cli', {});
         break;
       case 'run_electron':
         run('npm start --prefix apps/electron-app', {});
         break;
       case 'clean':
-        if (isWin) {
-          const winDirs = [
-            'build',
-            'sip-core-cpp\\pjsip_build',
-            'bindings\\node\\build',
-          ];
-          for (const dir of winDirs) {
-            if (fs.existsSync(path.join(root, dir))) {
-              run(`rmdir /s /q ${dir}`, {});
-            }
-          }
-        } else {
-          run('rm -rf build sip-core-cpp/pjsip_build bindings/node/build', {});
-        }
+        run('rm -rf build sip-core-cpp/pjsip_build bindings/node/build', {});
         break;
       case 'status':
         run('git status', {});
@@ -220,8 +142,4 @@ async function main() {
   }
 }
 
-if (process.platform === 'win32') {
-  require('./dev-cli.win');
-} else {
-  require('./dev-cli.unix');
-} 
+main(); 
