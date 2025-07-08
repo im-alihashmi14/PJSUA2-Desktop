@@ -3,13 +3,22 @@
   "version": "1.0.0",
   "main": "main.js",
   "private": true,
+  "build": {
+    "files": [
+      "**/*",
+      "build/Release/sipaddon.node"
+    ]
+  },
   "scripts": {
     "dev": "wait-on http://localhost:8081 && electron main.js",
-    "start": "electron main.js",
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:win-all": "electron-builder --win --x64 --arm64",
     "build": "echo 'No build step for Electron shell. Use the Expo static build.'"
   },
   "devDependencies": {
     "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
     "electron-reload": "^2.0.0-alpha.1",
     "wait-on": "^8.0.3"
   }

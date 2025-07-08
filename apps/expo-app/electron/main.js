@@ -1,6 +1,15 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const sipAddon =require('./../../../bindings/node/build/Release/sipaddon.node');
+let sipAddon;
+try {
+  const prodPath = path.join(__dirname, 'build', 'Release', 'sipaddon.node');
+  sipAddon = require(prodPath);
+  console.log('Loaded sipaddon.node from', prodPath);
+} catch (e) {
+  const devPath = path.join(__dirname, '..', '..', '..', 'bindings', 'node', 'build', 'Release', 'sipaddon.node');
+  sipAddon = require(devPath);
+  console.log('Loaded sipaddon.node from', devPath);
+}
 const sipFunctions = [
     'initSIP',
     'registerAccount',
