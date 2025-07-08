@@ -112,6 +112,8 @@ function getMenuChoices() {
   ) {
     choices.push({ name: 'Run Electron app', value: 'run_electron' });
   }
+  choices.push({ name: 'Run Expo dev server', value: 'run_expo_dev' });
+  choices.push({ name: 'Run Expo Electron shell', value: 'run_expo_electron_shell' });
   choices.push({ name: 'Clean all builds', value: 'clean' });
   choices.push({ name: 'Show status', value: 'status' });
   choices.push({ name: 'Exit', value: 'exit' });
@@ -258,7 +260,34 @@ async function main() {
       case 'run_electron':
         run('npm start --prefix apps/electron-app', {});
         break;
+      case 'run_expo_dev': {
+        // Start Expo dev server in foreground
+        const expoDir = path.join(root, 'apps', 'expo-app');
+        console.log('Starting Expo dev server...');
+        run('npm start', { cwd: expoDir });
+        break;
+      }
+      case 'run_expo_electron_shell': {
+        // Launch Electron shell (waits for Expo dev server)
+        const electronDir = path.join(root, 'apps', 'expo-app', 'electron');
+        console.log('Launching Electron shell (will wait for Expo dev server if needed)...');
+        run('npm start', { cwd: electronDir });
+        break;
+      }
       case 'clean': {
+        // Confirm with the user before cleaning all builds
+        const { confirmClean } = await inquirer.prompt([
+          {
+            type: 'confirm',
+            name: 'confirmClean',
+            message: 'Are you sure you want to clean all builds? This cannot be undone.',
+            default: false,
+          },
+        ]);
+        if (!confirmClean) {
+          console.log('Clean cancelled.');
+          break;
+        }
         // Clean all build artifacts, including CMake, MSBuild, and Node outputs
         const winDirs = [
           'build',
